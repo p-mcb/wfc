@@ -1,0 +1,144 @@
+---
+title: "Checking Regression Assumptions"
+output: html_notebook
+---
+The goal of this notebook is to check three assumptions:
+
+- regressors and residuals are independent
+- residuals are iid
+- residuals are Gaussian
+
+The checks will be qualitative rather than quantitative. In particular, graphs showing estimated residuals vs regressors and estimated residuals vs fitted values will be used to evaluate the first two assumptions, and a histogram will be used to evaluate the third.
+
+## Regression Equations
+First let's run the regressions included in the paper.
+
+```{r}
+wfc_data <- read.csv('data/vars.csv', header = TRUE)
+
+eq1 <- lm(avg.fc.26.30 ~ earn.ratio.2630.2425 + 
+            urb.pop.30 +
+            pct.mort.30 + 
+            debt.value.25 +
+            lv.index.20.12 +
+            debt.ratio.25.14 +
+            acre.ratio.25.10, data=wfc_data)
+
+eq2 <- lm(avg.fc.26.30 ~ earn.ratio.2630.2425 +
+            urb.pop.30 +
+            debt.value.25 +
+            lv.index.20.12 +
+            debt.ratio.25.14 +
+            acre.ratio.25.10, data=wfc_data)
+
+eq3 <- lm(avg.fc.26.30 ~ earn.ratio.2630.2425 +
+            urb.pop.30 +
+            debt.value.25 +
+            lv.index.20.12 +
+            debt.ratio.25.14 +
+            acre.ratio.25.10 +
+            wfc, data=wfc_data)
+
+eq4 <- lm(avg.fc.26.30 ~ earn.ratio.2630.2425 +
+            urb.pop.30 +
+            pct.mort.30 +
+            lv.index.20.12 +
+            debt.ratio.25.14 +
+            acre.ratio.25.10 +
+            wfc, data=wfc_data)
+
+eqs <- list(eq1, eq2, eq3, eq4)
+
+library(plyr)
+llply(eqs, summary)    # uncomment to show estimated coefficients, std errors, test stats, etc
+```
+
+## Exogeneity
+
+The following plots show regressors with significant coefficients vs estimated residuals. Note that (a) the original equations presented in this paper are equations 3 and 4, and (b) not all regressors are included in all equations
+
+```{r}
+# arrange the data to work nicely with ggplot
+wfc_rep <- wfc_data[rep(seq_len(nrow(wfc_data)), length(eqs)), ]
+wfc_rep$eq <- rep(seq_len(length(eqs)), each = nrow(wfc_data))
+
+# add estimated residuals
+resids <- t(laply(eqs, resid))
+dim(resids) <- length(eqs)*nrow(wfc_data)
+wfc_rep$resids <- resids
+
+# plot
+library(ggplot2)
+ggplot(data = wfc_rep) +
+  geom_point(aes(wfc, resids)) +
+  facet_wrap(~ eq, nrow = 2)
+```
+
+Let's take a closer look at the data points on the left of this graph ...
+
+```{r}
+library(dplyr)
+ggplot(data = filter(wfc_rep, wfc < 1e7)) +
+  geom_point(aes(wfc, resids)) +
+  facet_wrap(~ eq, nrow = 2)
+```
+
+
+```{r}
+ggplot(data = wfc_rep) +
+  geom_point(aes(acre.ratio.25.10, resids)) +
+  facet_wrap(~ eq, nrow = 2)
+```
+
+The same plot, with only the data close to the y axis:
+
+```{r}
+ggplot(data = filter(wfc_rep, acre.ratio.25.10 < 250)) +
+  geom_point(aes(acre.ratio.25.10, resids)) +
+  facet_wrap(~ eq, nrow = 2)
+```
+
+
+```{r}
+ggplot(data = wfc_rep) +
+  geom_point(aes(urb.pop.30, resids)) +
+  facet_wrap(~ eq, nrow = 2)
+```
+
+```{r}
+ggplot(data = wfc_rep) +
+  geom_point(aes(pct.mort.30, resids)) +
+  facet_wrap(~ eq, nrow = 2)
+```
+
+The above graphs suggest there may be dependence between the residuals and 
+
+```{r}
+ggplot(data = wfc_rep) +
+  geom_point(aes(debt.ratio.25.14, resids)) +
+  facet_wrap(~ eq, nrow = 2)
+```
+
+## Homoskedasticity
+
+```{r}
+fits <- t(laply(eqs, fitted))
+dim(fits) <- length(eqs)*nrow(wfc_data)
+wfc_rep$fits <- fits
+
+ggplot(data = wfc_rep) +
+  geom_point(aes(fits, resids)) +
+  facet_wrap(~ eq, nrow = 2)
+```
+
+The preceding plots show fitted values vs estimated residuals. They suggest that the residuals may be heteroskedastic. The estimated residuals show increased spread as the fitted value increases.
+
+
+## Normality
+
+```{r}
+ggplot(data = wfc_rep) +
+  geom_histogram(aes(resids), binwidth = 1) +
+  facet_wrap(~ eq, nrow = 2)
+```
+
